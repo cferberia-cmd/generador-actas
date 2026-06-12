@@ -1,5 +1,5 @@
 streamlit
 docxtpl
 python-docx
-streamlit-canvas
+st-signature-pad
 Pillow
