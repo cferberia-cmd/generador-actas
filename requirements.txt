@@ -1,5 +1,4 @@
-streamlit
-docxtpl
-python-docx
-st-signature-pad
-Pillow
+streamlit>=1.30.0
+docxtpl>=0.16.7
+python-docx>=1.1.0
+st-signature-pad>=0.1.1
