@@ -2,10 +2,11 @@ import streamlit as st
 import datetime
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Inches
-from streamlit_canvas import st_canvas
+from st_signature_pad import st_signature_pad
 from PIL import Image
 import io
 import os
+import base64
 
 # Configuración de pantalla centrada ideal para smartphones
 st.set_page_config(page_title="Generador de Actas", layout="centered")
@@ -16,9 +17,9 @@ st.write("Rellena el reporte y firma directamente con el dedo desde tu móvil.")
 TEMPLATE_PATH = "Plantilla_Acta_Visita.docx"
 
 if not os.path.exists(TEMPLATE_PATH):
-    st.error(f"⚠️ No se encuentra el archivo '{TEMPLATE_PATH}'. Asegúrate de subirlo a tu repositorio.")
+    st.error(f"⚠️ No se encuentra el archivo '{TEMPLATE_PATH}'. Asegúrate de subirlo a tu repositorio de GitHub.")
 else:
-    # Estructura de pestañas para facilitar la navegación táctil
+    # Estructura de pestañas para facilitar la navegación táctil en pantallas pequeñas
     tab1, tab2, tab3, tab4 = st.tabs(["📝 Datos Generales", "📋 Reporte", "📸 Fotos", "✍️ Firmas Táctiles"])
 
     # --- PESTAÑA 1: DATOS GENERALES ---
@@ -36,7 +37,7 @@ else:
         EmpConst = st.text_input("Empresa Constructora:")
         propiedad = st.text_input("Propiedad:")
 
-    # --- PESTAÑA 2: CONTENIDOS EXTENSOS ---
+    # --- PESTAÑA 2: CONTENIDOS EXTENSO ---
     with tab2:
         st.subheader("Texto del Acta")
         st.caption("🎙️ Tip móvil: ¡Puedes usar el micrófono de tu teclado para dictar el texto!")
@@ -77,48 +78,52 @@ else:
         st.subheader("Panel de Firmas Digitales")
         st.caption("Usa el dedo o un puntero en la pantalla de tu smartphone para firmar.")
 
-        # Configuración visual de las pizarras táctiles de firma
-        canvas_config = {
-            "fill_color": "rgba(255, 255, 255, 0)",
-            "stroke_width": 3,
-            "stroke_color": "#000000",      # Color del trazo (Tinta negra)
-            "background_color": "#F0F2F6",  # Fondo gris claro en la web para delimitar la caja
-            "height": 130,
-            "width": 300,
-            "drawing_mode": "freedraw",
-            "key": None
-        }
-
+        # --- CONSTRUCTORA ---
         st.markdown("#### 🛠️ La Constructora")
-        firmaConstructora = st.text_input("Nombre Representante Constructora:")
+        firmaConstructora = st.text_input("Nombre Responsable Constructora:")
         dniConstructora = st.text_input("DNI Constructora:")
-        canvas_const = st_canvas(**{**canvas_config, "key": "c_const"})
+        st.caption("Firma la Constructora aquí debajo:")
+        signature_const = st_signature_pad(key="sig_const")
 
+        st.markdown("---")
+        # --- PROPIEDAD ---
         st.markdown("#### 🏢 La Propiedad")
         firmaPropiedad = st.text_input("Nombre / Razón Social Propiedad:")
         dniPropiedad = st.text_input("DNI / CIF Propiedad:")
-        canvas_prop = st_canvas(**{**canvas_config, "key": "c_prop"})
+        st.caption("Firma la Propiedad aquí debajo:")
+        signature_prop = st_signature_pad(key="sig_prop")
 
+        st.markdown("---")
+        # --- DIRECCIÓN DE OBRA ---
         st.markdown("#### 📐 Dirección de Obra")
         firmaDireccion = st.text_input("Nombre Director de Obra:")
         dniDireccion = st.text_input("DNI Director de Obra:")
-        canvas_dir = st_canvas(**{**canvas_config, "key": "c_dir"})
+        st.caption("Firma el D. de Obra aquí debajo:")
+        signature_dir = st_signature_pad(key="sig_dir")
 
+        st.markdown("---")
+        # --- DIRECCIÓN DE EJECUCIÓN ---
         st.markdown("#### 🦺 Dirección de Ejecución")
         firmaEjecucion = st.text_input("Nombre Director de Ejecución:")
         dniEjecucion = st.text_input("DNI Director de Ejecución:")
-        canvas_ejec = st_canvas(**{**canvas_config, "key": "c_ejec"})
+        st.caption("Firma el D. de Ejecución aquí debajo:")
+        signature_ejec = st_signature_pad(key="sig_ejec")
 
-        # Función auxiliar para convertir el trazo de la pantalla en imagen para el Word
-        def procesar_lienzo(canvas_obj, doc_obj):
-            if canvas_obj.image_data is not None:
-                img = Image.fromarray(canvas_obj.image_data.astype('uint8'), 'RGBA')
-                # Si el usuario no ha dibujado nada, evitamos enviar una imagen transparente vacía
-                # comprobando que existan píxeles con trazos visibles.
-                img_buffer = io.BytesIO()
-                img.save(img_buffer, format='PNG')
-                img_buffer.seek(0)
-                return InlineImage(doc_obj, img_buffer, width=Inches(1.8))
+        # Función para convertir la firma en formato Base64/DataURL a imagen válida para Word
+        def procesar_firma_pad(signature_data, doc_obj):
+            if signature_data and signature_data.startswith("data:image/png;base64,"):
+                try:
+                    # Eliminar la cabecera del DataURL
+                    base64_data = signature_data.split(",")[1]
+                    img_bytes = base64.b64decode(base64_data)
+                    img = Image.open(io.BytesIO(img_bytes))
+                    
+                    img_buffer = io.BytesIO()
+                    img.save(img_buffer, format='PNG')
+                    img_buffer.seek(0)
+                    return InlineImage(doc_obj, img_buffer, width=Inches(1.8))
+                except Exception:
+                    return ""
             return ""
 
         # --- BOTÓN DE PROCESADO GENERAL ---
@@ -137,11 +142,11 @@ else:
                         "FOTO_DESCRIPCION": f["descripcion"]
                     })
                 
-                # Extraer firmas de los lienzos táctiles
-                img_f_const = procesar_lienzo(canvas_const, doc)
-                img_f_prop = procesar_lienzo(canvas_prop, doc)
-                img_f_dir = procesar_lienzo(canvas_dir, doc)
-                img_f_ejec = procesar_lienzo(canvas_ejec, doc)
+                # Extraer firmas de las pizarras táctiles de JavaScript
+                img_f_const = procesar_firma_pad(signature_const, doc)
+                img_f_prop = procesar_firma_pad(signature_prop, doc)
+                img_f_dir = procesar_firma_pad(signature_dir, doc)
+                img_f_ejec = procesar_firma_pad(signature_ejec, doc)
 
                 # Construir el diccionario con los nombres exactos de las llaves de tu Word
                 context = {
@@ -158,7 +163,7 @@ else:
                     "incidencias": incidencias,
                     "tareas": tareas,
                     "fotos": fotos_contexto,
-                    # Mapeo de Nombres y DNIs
+                    # Fallbacks de texto si no firman con trazo táctil
                     "firmaConstructora": f"\n{firmaConstructora}" if firmaConstructora else "",
                     "dniConstructora": dniConstructora,
                     "firmaPropiedad": f"\n{firmaPropiedad}" if firmaPropiedad else "",
@@ -169,8 +174,7 @@ else:
                     "dniEjecucion": dniEjecucion,
                 }
                 
-                # Inyectar las imágenes de las firmas directamente en el campo de texto del nombre 
-                # para que aparezcan justo encima del texto en el documento final.
+                # Si hay firmas táctiles hechas, sustituimos la variable del texto por el dibujo de la firma
                 if img_f_const: context["firmaConstructora"] = img_f_const
                 if img_f_prop: context["firmaPropiedad"] = img_f_prop
                 if img_f_dir: context["firmaDireccion"] = img_f_dir
